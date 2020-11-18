@@ -1,0 +1,23 @@
+---
+- hosts: all
+  gather_facts: false
+  order: sorted
+  tasks:
+
+    - name: drop zip logs
+      shell: "find {{ item }} -name '*.zip' -user {{ ansible_ssh_user }} -delete"
+      ignore_errors: "{{ ignore_uninstall_error|default('yes') }}"
+      changed_when: False
+      with_items:
+        - "/opt/pprb/logs"
+        - "{{ wf_install_dir }}/standalone/log"
+
+    - name: drop server logs
+      shell: "find {{ wf_install_dir }} -name 'server.log.*' -user {{ ansible_ssh_user }} -delete"
+      ignore_errors: "{{ ignore_uninstall_error|default('yes') }}"
+      changed_when: False
+
+    - name: drop hotspot logs
+      shell: "find {{ wf_install_dir }} -name 'hotspot*.log' -user {{ ansible_ssh_user }} -delete"
+      ignore_errors: "{{ ignore_uninstall_error|default('yes') }}"
+      changed_when: False

@@ -1,0 +1,67 @@
+# name: heap-dump.yaml
+# author: Andrey Vest
+#
+# Путь для файлов может быть передан через extraParams в виде -e dump_dir=/opt/pprb/
+---
+- hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: check variable definition
+      assert:
+        that: wf_install_dir is defined
+        msg: "Variable wf_install_dir must be defined!"
+
+    - name: define dump out dir
+      set_fact:
+        dump_out_dir: "{{ dump_dir | default(wf_install_dir | dirname) }}"
+
+    - stat:
+        path: "{{ dump_out_dir }}"
+      register: p
+
+    - name: check dump out dir presence
+      assert:
+        that: p.stat.exists and p.stat.isdir
+        msg: "p.stat.path has to exist!"
+
+    - name: define wildfly pid
+      shell: "ps ax | grep {{ wf_install_dir }} | grep java | grep -v 'grep java' | awk '{ print $1 }'"
+      changed_when: false
+      register: wfPid
+
+    - debug: msg="Wildfly pid is {{ wfPid.stdout }}"
+      when: wfPid.stdout != ""
+
+    - fail: msg="Wildfly is not started!"
+      when: wfPid.stdout == ""
+
+    - set_fact: 
+        wfPID: "{{ wfPid.stdout }}"
+
+    - name: get heap dump
+      shell: "jmap -dump:live,format=b,file={{ dump_out_dir }}/heap-{{ inventory_hostname }}.dump {{ wfPID }}"
+      tags: heapdump
+
+    - name: get thread dump
+      shell: "jstack {{ wfPID }} > {{ dump_out_dir }}/thread-{{ inventory_hostname }}.dump"
+      tags: jstack
+
+    - name: clean previous dumps
+      file:
+        path: "{{ dump_out_dir }}/{{ inventory_hostname }}.dumps.tar.gz"
+        state: absent
+
+    - name: archive dumps
+      archive:
+        path:
+            - "{{ dump_out_dir }}/thread-{{ inventory_hostname }}.dump"
+            - "{{ dump_out_dir }}/heap-{{ inventory_hostname }}.dump"
+        dest: "{{ dump_out_dir }}/{{ inventory_hostname }}.dumps.tar.gz"
+        format: gz
+        remove: yes
+
+    - name: Print final message
+      debug:
+        msg: "Your files in archive {{ dump_out_dir }}/{{ inventory_hostname }}.dumps.tar.gz"
+#      run_once: true
